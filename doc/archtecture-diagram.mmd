@@ -1,0 +1,65 @@
+flowchart LR
+    subgraph Kafka["Kafka Broker"]
+        TC["transaction.created<br/>key: accountId"]
+        TU["transaction.unauthorized<br/>key: accountId"]
+        TCOMP["transaction.completed<br/>key: accountId"]
+    end
+
+    subgraph PaymentService["Payment Service"]
+        Consumer["TransactionConsumer<br/>(infrastructure)"]
+        Handler["TransactionCommandHandler<br/>(application)"]
+        Domain["Domain"]
+        Transaction["Transaction"]
+        User["User"]
+        Account["Account"]
+        Publisher["IKafkaPublisher"]
+        OutboxProcessor["OutboxProcessor<br/>(infrastructure)"]
+        OutboxRepo["IOutboxRepository"]
+        Idempotency["IdempotencyChecker<br/>(infrastructure)"]
+        Abstractions["Abstractions (application)"]
+        ProcessedRepo["IProcessedMessageRepository"]
+        UnitOfWork["IUnitOfWork"]
+        AccountRepo["IAccountRepository"]
+        Persistence["infrastructure (persistence)"]
+        SQLTransaction["SQL Transaction<br/>UPDATE Account<br/>INSERT Outbox<br/>INSERT ProcessedMessage<br/>COMMIT Transaction"]
+    end
+
+    subgraph API["API"]
+        REST["Api Rest<br/>/api/*"]
+        BalanceHandler["GetAccountBalanceHandler<br/>(application)"]
+        BalanceAdapter["ConsultaSaldoAdapter<br/>(query SQL)"]
+        GET["GET /api/account/{accountId}/info"]
+        SelectAccount["SELECT Account Aggregate"]
+    end
+
+    subgraph Database["DATABASE"]
+        DB[(Database)]
+    end
+
+    Kafka --> Consumer
+    Consumer --> Handler
+    Handler --> Domain
+    Domain --> Transaction
+    Domain --> User
+    Domain --> Account
+
+    Handler --> Idempotency
+    Handler --> Abstractions
+    Abstractions --> AccountRepo
+    Abstractions --> OutboxRepo
+    Abstractions --> ProcessedRepo
+    Abstractions --> UnitOfWork
+
+    Handler --> SQLTransaction
+    SQLTransaction --> Persistence
+    Persistence --> DB
+
+    OutboxProcessor --> OutboxRepo
+    OutboxProcessor --> Publisher
+    Publisher --> Kafka
+
+    REST --> GET
+    GET --> BalanceHandler
+    BalanceHandler --> BalanceAdapter
+    BalanceAdapter --> SelectAccount
+    SelectAccount --> DB
