@@ -33,6 +33,9 @@ public class Money implements Serializable {
         if (currency == null) {
             throw new IllegalArgumentException("Currency must not be null");
         }
+        if (amount.signum() < 0) {
+            throw new IllegalArgumentException("Amount must not be negative: " + amount);
+        }
         this.amount = normalize(amount, currency);
         this.currency = currency;
     }
@@ -47,13 +50,39 @@ public class Money implements Serializable {
 
     public Money add(Money money, BigDecimal rate) {
         requireMoney(money);
+        requireRate(rate);
+        return new Money(amount.add(convertedAmount(money, rate)), currency);
+    }
+
+    public Money subtract(Money money) {
+        requireMoney(money);
+        if (money.currency.equals(currency)) {
+            return subtract(money, BigDecimal.ONE);
+        }
+        return subtract(money, fetchRate(money.currency, currency));
+    }
+
+    public Money subtract(Money money, BigDecimal rate) {
+        requireMoney(money);
+        requireRate(rate);
+        BigDecimal result = amount.subtract(convertedAmount(money, rate));
+        if (result.signum() < 0) {
+            throw new IllegalArgumentException("Insufficient funds");
+        }
+        return new Money(result, currency);
+    }
+
+    private BigDecimal convertedAmount(Money money, BigDecimal rate) {
+        if (money.currency.equals(currency)) {
+            return money.amount;
+        }
+        return money.amount.multiply(rate).setScale(currency.getDefaultFractionDigits(), RoundingMode.HALF_UP);
+    }
+
+    private static void requireRate(BigDecimal rate) {
         if (rate == null || rate.signum() <= 0) {
             throw new IllegalArgumentException("Rate must be positive");
         }
-        BigDecimal converted = money.currency.equals(currency)
-                ? money.amount
-                : money.amount.multiply(rate).setScale(currency.getDefaultFractionDigits(), RoundingMode.HALF_UP);
-        return new Money(amount.add(converted), currency);
     }
 
     private static void requireMoney(Money money) {
@@ -95,5 +124,9 @@ public class Money implements Serializable {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while fetching exchange rate", e);
         }
+    }
+
+    public boolean isLessThan(Money money){
+        return amount.compareTo(money.amount) < 0;
     }
 }
